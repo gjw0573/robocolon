@@ -1,0 +1,116 @@
+from dataclasses import dataclass
+from typing import Dict, Optional, Any, List
+import yaml
+
+
+@dataclass
+class DataConfig:
+    train_dir: str
+    train_ann: str
+    val_dir: str
+    val_ann: str
+    val_mask: str = None
+    num_workers: int = 8
+    batch_size: int = 4
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'DataConfig':
+        return cls(
+            train_dir=str(data['train_dir']),
+            train_ann=str(data['train_ann']),
+            val_dir=str(data['val_dir']),
+            val_ann=str(data['val_ann']),
+            val_mask=str(data.get('val_mask', None)),
+            num_workers=int(data.get('num_workers', 8)),
+            batch_size=int(data.get('batch_size', 4))
+        )
+
+@dataclass
+class ModelConfig:
+    config_path: str
+    weights_path: str
+    lora_weights: str = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ModelConfig':
+        return cls(
+            config_path=str(data['config_path']),
+            weights_path=str(data['weights_path']),
+            lora_weights=str(data.get('lora_weights', None)),
+        )
+
+@dataclass
+class EvaluationConfig:
+    iou_thresholds: List[float] = None
+    score_threshold: float = 0.25
+    max_detections: int = 100
+    metrics_output_dir: str = 'evaluation_results'
+    generate_visualizations: bool = True
+    num_visualization_samples: int = 10
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'EvaluationConfig':
+        if data is None:
+            return cls()
+            
+        iou_thresholds = data.get('iou_thresholds', [0.5, 0.75])
+        if isinstance(iou_thresholds, str):
+            iou_thresholds = [float(x.strip()) for x in iou_thresholds.split(',')]
+            
+        return cls(
+            iou_thresholds=iou_thresholds,
+            score_threshold=float(data.get('score_threshold', 0.25)),
+            max_detections=int(data.get('max_detections', 100)),
+            metrics_output_dir=str(data.get('metrics_output_dir', 'evaluation_results')),
+            generate_visualizations=bool(data.get('generate_visualizations', True)),
+            num_visualization_samples=int(data.get('num_visualization_samples', 10))
+        )
+
+@dataclass
+class TrainingConfig:
+    num_epochs: int = 1000
+    learning_rate: float = 1e-3
+    save_dir: str = 'weights'
+    save_frequency: int = 100
+    warmup_epochs: int = 5
+    use_lora: bool = False
+    lora_rank: int = 32
+    visualization_frequency: int = 5
+    evaluate_during_training: bool = True
+    evaluation_frequency: int = 10
+    evaluation: EvaluationConfig = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'TrainingConfig':
+        evaluation_config = EvaluationConfig.from_dict(data.get('evaluation', None))
+        
+        return cls(
+            num_epochs=int(data.get('num_epochs', 1000)),
+            learning_rate=float(data.get('learning_rate', 1e-3)),
+            save_dir=str(data.get('save_dir', 'weights')),
+            save_frequency=int(data.get('save_frequency', 100)),
+            warmup_epochs=int(data.get('warmup_epochs', 5)),
+            use_lora=bool(data.get('use_lora', False)),
+            lora_rank=int(data.get('lora_rank', 32)),
+            visualization_frequency=int(data.get('visualization_frequency', 5)),
+            evaluate_during_training=bool(data.get('evaluate_during_training', True)),
+            evaluation_frequency=int(data.get('evaluation_frequency', 10)),
+            evaluation=evaluation_config
+        )
+
+class ConfigurationManager:
+    @staticmethod
+    def load_config(config_path: str) -> tuple[DataConfig, ModelConfig, TrainingConfig]:
+        """Load configuration from YAML file with type conversion"""
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            
+        try:
+            data_config = DataConfig.from_dict(config['data'])
+            model_config = ModelConfig.from_dict(config['model'])
+            training_config = TrainingConfig.from_dict(config['training'])
+        except (KeyError, ValueError, TypeError) as e:
+            raise ValueError(f"Invalid configuration format: {str(e)}")
+        
+        return data_config, model_config, training_config
+
